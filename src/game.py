@@ -3,6 +3,7 @@ import pygame
 from copy import deepcopy
 from const import *
 from ai import Ai
+from board import Board
 
 class Game:
 
@@ -12,42 +13,70 @@ class Game:
         self.turn = "white"
         self.board.add_all_moves(self.turn)
 
-        self.game_log = [deepcopy(board)]
+        self.game_log = ["rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR"]
         self.index = 0
 
-        self.player_white = Ai(self.board)
-        self.player_black = Ai(self.board)
+        self.player_white = Ai()
+        self.player_black = Ai()
+        self.game_over = False
+
+    def ai_play(self):
+        move = self.player_black.play(self.board, self.turn)
+        self.board.make_move(move)
+        self.change_turn()
 
     def change_turn(self):
 
-        self.index += 1
         self.remove_future_states()
-        self.game_log.append(deepcopy(self.board))
+        self.index += 1
+        new_fen = self.board.convert_board_to_fen()
 
+        # check draws (stalemate later)
+        if self.check_50_move_rule() or self.threefold_rep(new_fen):
+            self.game_over = True
+
+        self.game_log.append(new_fen)
         self.board.reset_all_color_moves(self.turn)
         self.turn = "black" if self.turn == "white" else "white"
         moves = self.board.add_all_moves(self.turn)
+
+        # check checkmate and stalemate
         if self.board.check_checkmate(moves):
-            print("checkmate")
+            self.game_over = True
 
     def undo_move(self):
-        print(self.index)
         if self.index != 0:
             self.index -= 1
+            self.game_over = False
             self.turn = "black" if self.turn == "white" else "white"
-            self.board = deepcopy(self.game_log[self.index])
+            print(self.game_log, self.index)
+            self.board = Board(self.game_log[self.index])
+            self.board.add_all_moves(self.turn)
 
     def redo_move(self):
-        print(self.index)
         if self.index != len(self.game_log) - 1:
             self.index += 1
             self.turn = "black" if self.turn == "white" else "white"
-            self.board = deepcopy(self.game_log[self.index])
+            print(self.game_log, self.index)
+            self.board = Board(self.game_log[self.index])
+            moves = self.board.add_all_moves(self.turn)
+            if self.board.check_checkmate(moves):
+                self.game_over = True
 
     def remove_future_states(self):
-        print(self.game_log, self.index)
-        del self.game_log[self.index+1:]
-        print(self.game_log, self.index)
+        del self.game_log[self.index + 1:]
+
+    def check_50_move_rule(self):
+        if self.board.uneventful_moves > 99:
+            return True
+
+    def threefold_rep(self, fen):
+        matches = 0
+        for prev_pos in self.game_log:
+            if prev_pos == fen:
+                matches+= 1
+
+        return True if matches > 1 else False
 
     # blit methods
     def show_bg(self, surface):
