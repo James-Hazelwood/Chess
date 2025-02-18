@@ -1,4 +1,4 @@
-from copy import deepcopy
+import time
 
 import pygame
 import sys
@@ -9,7 +9,6 @@ from board import Board
 from dragger import Dragger
 from promotion import *
 from sound import Sound
-from move import Move
 
 class Main:
 
@@ -31,6 +30,8 @@ class Main:
         self.black_player = "human"
         self.human_move = False
 
+        self.time_between_ai_move = 0.20
+
         self.stop_flag = False
 
         self.sound = Sound()
@@ -45,6 +46,7 @@ class Main:
 
             if not self.human_move and not self.stop_flag and not self.game.game_over:
                 self.game.ai_play()
+                time.sleep(self.time_between_ai_move)
 
             # all user inputs
             for event in pygame.event.get():
@@ -83,7 +85,7 @@ class Main:
         self.board = self.game.board
 
         if self.dragger.dragging:
-            self.game.show_moves(self.screen, self.dragger.piece)
+            self.game.show_moves(self.screen, self.dragger.initial_row, self.dragger.initial_col)
             self.game.show_cur_dragged_piece(self.screen, self.dragger.get_initial_loc())
             self.game.show_pieces(self.screen)
             self.dragger.update_blit(self.screen)
@@ -112,25 +114,25 @@ class Main:
             released_row = self.dragger.mouse_y // SQSIZE
             released_col = self.dragger.mouse_x // SQSIZE
 
-            if Move(self.dragger.piece, None, [released_row, released_col]).check_valid():
+            move = self.board.get_move([self.dragger.initial_row, self.dragger.initial_col], [released_row, released_col])
+
+            if move:
 
                 # sfx
-                if self.board.is_capture(self.dragger.piece, released_row, released_col):
+                if self.board.is_capture(move):
                     self.sound.capture_sound()
                 else:
                     self.sound.move_sound()
 
                 # pawn promotion
-                promotion = None
-                if self.board.check_pawn_promotion(self.dragger.piece, released_row):
+                if move.promotion is not None:
                     promotion = show_promotion_popup()
+                    move.promotion = promotion
                     if promotion is None:
                         return
 
-                move = Move(self.dragger.piece, [self.dragger.initial_row, self.dragger.initial_col],
-                                         [released_row, released_col], promotion)
                 self.board.make_move(move)
-                self.game.change_turn()
+                self.game.change_turn(move)
 
             # reset moves
             self.dragger.undrag_piece()
@@ -163,3 +165,6 @@ class Main:
 if __name__ == "__main__":
     main = Main()
     main.mainloop()
+
+# ['b6a4', 'c3b5', 'f6g8', 'e5c4', 0]
+# r3k1Nr/p1ppqpb1/bn2pnp1/3P4/1pN1P3/2N2Q1p/PPPBBPPP/R3K2R/ 0 6 [2, 5] [0, 6]

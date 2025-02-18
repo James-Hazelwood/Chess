@@ -8,8 +8,6 @@ class Piece:
 
         value_sign = 1 if color == "white" else -1
         self.value = value * value_sign
-        self.moves = []
-        self.moved = False
         self.image = image
         self.set_image()
         self.image_rect = image_rect
@@ -34,7 +32,6 @@ class Pawn(Piece):
 
     def __init__(self, color):
         self.dir = -1 if color == "white" else 1
-        self.enpassantable = False
         super().__init__("pawn", color, 1.0, "p")
 
 class Knight(Piece):
