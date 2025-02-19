@@ -29,4 +29,14 @@ class Move:
         for num1, num2 in [self.start, self.end]:
             return_str += f"{chr(97 + num2)}{8 - num1}"
 
+        if self.promotion is not None:
+            if self.promotion == "knight":
+                return_str += "n"
+            elif self.promotion == "bishop":
+                return_str += "b"
+            elif self.promotion == "rook":
+                return_str += "r"
+            elif self.promotion == "queen":
+                return_str += "q"
+
         return return_str

@@ -21,16 +21,22 @@ class Main:
         empty_icon = pygame.Surface((1, 1))
         pygame.display.set_icon(empty_icon)
 
-        self.board = Board()
+        # change this to change start of the game
+        self.fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR"
+
+        # lol
+        self.destroy_matt = False
+
+        self.board = Board(self.fen, self.destroy_matt)
         self.dragger = Dragger()
         self.game = Game(self.dragger, self.board)
 
         # change who's playing
-        self.white_player = "human"
-        self.black_player = "human"
+        self.white_player = "bot"
+        self.black_player = "bot"
         self.human_move = False
 
-        self.time_between_ai_move = 0.20
+        self.time_between_ai_move = 0.00
 
         self.stop_flag = False
 
@@ -165,6 +171,3 @@ class Main:
 if __name__ == "__main__":
     main = Main()
     main.mainloop()
-
-# ['b6a4', 'c3b5', 'f6g8', 'e5c4', 0]
-# r3k1Nr/p1ppqpb1/bn2pnp1/3P4/1pN1P3/2N2Q1p/PPPBBPPP/R3K2R/ 0 6 [2, 5] [0, 6]

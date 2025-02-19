@@ -22,9 +22,6 @@ class Piece:
             f"../assets/images/imgs-{size}px/{self.color}_{self.name}.png"
         )
 
-    def set_possible_moves(self, moves):
-        self.moves = moves
-
     def other_color(self):
         return "black" if self.color == "white" else "white"
 

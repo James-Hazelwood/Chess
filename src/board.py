@@ -8,7 +8,7 @@ from move import Move
 class Board:
 
     # rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR standard
-    def __init__(self, fen= "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R"):
+    def __init__(self, fen= "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR", destroy_matt=False):
         self.squares = []
         self.legal_moves = []
 
@@ -22,9 +22,6 @@ class Board:
         self.kings["white"] = []
         self.kings["black"] = []
 
-        # castling rights
-        self.castle_rights = [[1, 1], [1, 1]]
-
         self.in_check_var = False
         self.last_move = [[-1, -1,], [-1, -1]]
 
@@ -35,6 +32,9 @@ class Board:
         self._create()
         self._add_pieces_fen(fen)
 
+        # destroying matt
+        self.destroy_matt = destroy_matt
+
     # moves a piece
     def make_move(self, move, testing= False):
 
@@ -44,12 +44,16 @@ class Board:
         new_row = move.end[0]
         new_col = move.end[1]
 
-        move.castle_rights = copy.deepcopy(self.castle_rights)
+        move.castle_rights = [row[:] for row in self.castle_rights]
 
         # add 1 to moves counter
         self.uneventful_moves += 1
 
-        # remove captures and reset move counter
+        # if enpassant, remove capture from squares
+        if move.en_passant_occur:
+            self.squares[new_row - piece.dir][new_col].piece = None
+
+        # remove captures from pieces dict and reset move counter
         if self.is_capture(move) and not testing:
             self.uneventful_moves = 0
 
@@ -59,7 +63,6 @@ class Board:
 
             # normal
             else:
-                print(self.convert_board_to_fen(), new_row, new_col, move.start, move.end)
                 self.pieces[piece.other_color()].remove([new_row, new_col])
 
         # castling
@@ -105,9 +108,10 @@ class Board:
 
         # update castling rights
         elif isinstance(piece, Rook):
-            if col == 0 and row == 0 if piece.color == "black" else 7:
+            check_row = 0 if piece.color == "black" else 7
+            if col == 0 and row == check_row:
                 self.castle_rights[0 if piece.color == "white" else 1][0] = 0
-            elif col == 7 and row == 0 if piece.color == "black" else 7:
+            elif col == 7 and row == check_row:
                 self.castle_rights[0 if piece.color == "white" else 1][1] = 0
 
         # reset uneventful_moves
@@ -178,7 +182,7 @@ class Board:
         if isinstance(piece, King):
             self.kings[piece.color] = [row, col]
 
-        self.castle_rights = copy.deepcopy(move.castle_rights)
+        self.castle_rights = [row[:] for row in move.castle_rights]
 
         # reset last piece moved
         self.last_move = move.last_move
@@ -216,6 +220,11 @@ class Board:
             row, col = piece_loc
             self.legal_moves.extend(self.calc_moves(row, col))
 
+        if self.destroy_matt and color == "black":
+            self.legal_moves.append(Move(self.squares[0][4].piece, [0, 4], [7, 4], self.squares[7][4].piece,
+                                                       False, self.last_move, False,
+                                                       None))
+
         return self.legal_moves
 
     def reset_all_color_moves(self, color):
@@ -227,7 +236,6 @@ class Board:
         possible_moves = []
         possible_move_loc = []
         piece = self.squares[row][col].piece
-        piece_taken = None
         last_move = self.last_move
 
         if isinstance(piece, Pawn):
@@ -304,7 +312,6 @@ class Board:
                                            None)
                 possible_moves.append(move)
 
-
             # castling
             # queenside
             new_row = 7 if piece.color == "white" else 0
@@ -312,12 +319,12 @@ class Board:
 
             if self.castle_rights[0 if piece.color == "white" else 1][0] == 1 and isinstance(check_rook, Rook) and check_rook.color == piece.color:
                 for new_col in range(1,4):
-                    if self.squares[new_row][new_col].has_piece() or (self.in_check(new_row, new_col + 1, piece.color) and new_col != 3):
+                    if self.squares[new_row][new_col].has_piece() or (self.in_check(new_row, new_col + 1, piece.color) and new_col != 1):
                         break
 
                     # passed all piece checks
                     if new_col == 3:
-                        move = Move(piece, [row, col], [new_row, 2], piece_taken,
+                        move = Move(piece, [row, col], [new_row, 2], None,
                                     True, last_move, False,
                                     None)
                         possible_moves.append(move)
@@ -331,7 +338,7 @@ class Board:
 
                     # passed all piece checks
                     if new_col == 6:
-                        move = Move(piece, [row, col], [new_row, 6], piece_taken,
+                        move = Move(piece, [row, col], [new_row, 6], None,
                                     True, last_move, False,
                                     None)
                         possible_moves.append(move)
@@ -487,23 +494,22 @@ class Board:
         return "white" if color == "black" else "black"
 
     def convert_board_to_fen(self):
-        return_string = ""
+        substrings = []
         for row in self.squares:
             num_blanks = 0
             for square in row:
                 if square.has_piece():
                     if num_blanks != 0:
-                        return_string += f"{num_blanks}"
-                    return_string += f"{square.piece.code}"
+                        substrings.append(f"{num_blanks}")
+                    substrings.append(f"{square.piece.code}")
                     num_blanks = 0
 
                 else:
                     num_blanks += 1
             if num_blanks != 0:
-                return_string += f"{num_blanks}"
-            return_string += "/"
+                substrings.append(f"{num_blanks}")
 
-        return return_string
+        return "".join(substrings)
 
         # extra parts to keep track of if rooks / kings moved
         # return_string += "-"
@@ -551,3 +557,12 @@ class Board:
                     cur_col += 1
             cur_row += 1
 
+        # castle rights if not given
+        self.castle_rights = [[1, 1], [1, 1]]
+        for row, col, color in [[0, 0, 1], [0, 7, 1], [7, 0, 0], [7, 7, 0]]:
+            if not isinstance(self.squares[row][col].piece, Rook):
+                self.castle_rights[color][int(col / 7)] = 0
+
+        for row, col, color in [[0, 4, 1], [7, 4, 0]]:
+            if not isinstance(self.squares[row][col].piece, King):
+                self.castle_rights[color] = [0, 0]
