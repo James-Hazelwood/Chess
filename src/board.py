@@ -1,5 +1,3 @@
-import copy
-
 from const import *
 from square import Square
 from piece import *
@@ -16,6 +14,7 @@ class Board:
         self.pieces = dict()
         self.pieces["white"] = []
         self.pieces["black"] = []
+        self.pieces_left = 0
 
         # dict of king locations
         self.kings = dict()
@@ -54,16 +53,18 @@ class Board:
             self.squares[new_row - piece.dir][new_col].piece = None
 
         # remove captures from pieces dict and reset move counter
-        if self.is_capture(move) and not testing:
-            self.uneventful_moves = 0
+        if self.is_capture(move):
+            self.pieces_left -= 1
+            if not testing:
+                self.uneventful_moves = 0
 
-            # en passant
-            if move.en_passant_occur:
-                self.pieces[piece.other_color()].remove([new_row - piece.dir, new_col])
+                # en passant
+                if move.en_passant_occur:
+                    self.pieces[piece.other_color()].remove([new_row - piece.dir, new_col])
 
-            # normal
-            else:
-                self.pieces[piece.other_color()].remove([new_row, new_col])
+                # normal
+                else:
+                    self.pieces[piece.other_color()].remove([new_row, new_col])
 
         # castling
         if move.castling:
@@ -152,6 +153,7 @@ class Board:
         # add captures and reset move counter
         if self.is_capture(move):
             self.uneventful_moves = 0
+            self.pieces_left += 1
 
             # en passant
             if move.en_passant_occur:
@@ -226,10 +228,6 @@ class Board:
                                                        None))
 
         return self.legal_moves
-
-    def reset_all_color_moves(self, color):
-        for row, col in self.pieces[color]:
-            self.squares[row][col].piece.moves = []
 
     # move functions
     def calc_moves(self, row, col):
@@ -554,6 +552,7 @@ class Board:
 
                     self.squares[cur_row][cur_col] = Square(cur_row, cur_col, new_piece)
                     self.pieces[color].append([cur_row, cur_col])
+                    self.pieces_left += 1
                     cur_col += 1
             cur_row += 1
 
