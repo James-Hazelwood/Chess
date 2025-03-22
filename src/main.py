@@ -5,9 +5,7 @@ import sys
 
 from const import *
 from game import Game
-from board import Board
 from dragger import Dragger
-from promotion import *
 from sound import Sound
 
 class Main:
@@ -27,9 +25,12 @@ class Main:
         # lol
         self.destroy_matt = False
 
-        self.board = Board(self.fen, self.destroy_matt)
         self.dragger = Dragger()
-        self.game = Game(self.dragger, self.board)
+        self.game = Game(self.dragger, self.fen, self.destroy_matt)
+
+        # used for promotions
+        self.promotion_state = False
+        self.promotion_move = None
 
         # change who's playing
         self.white_player = "bot"
@@ -37,20 +38,27 @@ class Main:
         self.human_move = False
 
         self.time_between_ai_move = 0.00
-
         self.stop_flag = False
 
         self.sound = Sound()
 
-
-    def mainloop(self):
+    def mainloop(self, simulation):
 
         while True:
 
             self.update_screen()
             self.human_move = self.white_player == "human" and self.game.turn == "white" or self.black_player == "human" and self.game.turn == "black"
 
-            if not self.human_move and not self.stop_flag and not self.game.game_over:
+            if self.game.game_state != "play" and simulation:
+                if self.game.game_state == "draw":
+                    return 0
+                elif self.game.game_state == "white wins":
+                    return 1
+                else:
+                    return -1
+
+
+            if not self.human_move and not self.stop_flag and self.game.game_state == "play":
                 self.game.ai_play()
                 time.sleep(self.time_between_ai_move)
 
@@ -58,7 +66,7 @@ class Main:
             for event in pygame.event.get():
 
                 # if it's not a human turn, don't allow humans to interact
-                if self.human_move and not self.game.game_over:
+                if self.human_move and self.game.game_state == "play":
                     # click
                     if event.type == pygame.MOUSEBUTTONDOWN:
                         self.click(event)
@@ -88,8 +96,6 @@ class Main:
         self.game.show_last_move(self.screen)
         self.game.show_in_check(self.screen)
 
-        self.board = self.game.board
-
         if self.dragger.dragging:
             self.game.show_moves(self.screen, self.dragger.initial_row, self.dragger.initial_col)
             self.game.show_cur_dragged_piece(self.screen, self.dragger.get_initial_loc())
@@ -98,15 +104,35 @@ class Main:
         else:
             self.game.show_pieces(self.screen)
 
+        if self.promotion_state:
+            self.game.show_promotion(self.screen, self.promotion_move)
+
     def click(self, event):
         self.dragger.update_mouse(event.pos)
 
         clicked_row = self.dragger.mouse_y // SQSIZE
         clicked_col = self.dragger.mouse_x // SQSIZE
 
+        # see if user selects piece in promotion_state
+        if self.promotion_state:
+            if self.promotion_move.end[1] == clicked_col:
+                direction = self.promotion_move.piece.dir
+                start_row = self.promotion_move.end[0]
+                i = 0
+                for piece in ["queen", "rook", "knight", "bishop"]:
+                    if clicked_row == start_row + (i * -direction):
+                        self.promotion_move.promotion = piece
+                        self.game.board.make_move(self.promotion_move)
+                        self.game.change_turn(self.promotion_move)
+                    i += 1
+            # reset promotions       
+            self.promotion_move = None
+            self.promotion_state = False
+            return
+
         # checking if clicked square has a piece
-        if self.board.squares[clicked_row][clicked_col].has_piece():
-            piece = self.board.squares[clicked_row][clicked_col].piece
+        elif self.game.board.squares[clicked_row][clicked_col].has_piece():
+            piece = self.game.board.squares[clicked_row][clicked_col].piece
 
             self.dragger.save_initial(clicked_row, clicked_col, piece)
 
@@ -120,25 +146,24 @@ class Main:
             released_row = self.dragger.mouse_y // SQSIZE
             released_col = self.dragger.mouse_x // SQSIZE
 
-            move = self.board.get_move([self.dragger.initial_row, self.dragger.initial_col], [released_row, released_col])
+            move = self.game.board.get_move([self.dragger.initial_row, self.dragger.initial_col], [released_row, released_col])
 
             if move:
 
                 # sfx
-                if self.board.is_capture(move):
+                if self.game.board.is_capture(move):
                     self.sound.capture_sound()
                 else:
                     self.sound.move_sound()
 
                 # pawn promotion
                 if move.promotion is not None:
-                    promotion = show_promotion_popup()
-                    move.promotion = promotion
-                    if promotion is None:
-                        return
+                    self.promotion_state = True
+                    self.promotion_move = move
 
-                self.board.make_move(move)
-                self.game.change_turn(move)
+                else:
+                    self.game.board.make_move(move)
+                    self.game.change_turn(move)
 
             # reset moves
             self.dragger.undrag_piece()
@@ -146,9 +171,7 @@ class Main:
     def key_press(self, event):
         # reset
         if event.key == pygame.K_r:
-            # make a new board and game from scratch
-            self.board = Board()
-            self.game = Game(self.dragger, self.board)
+            self.game.reset(self.fen, self.destroy_matt)
 
         if event.key == pygame.K_s:
             # stop ai from making moves
@@ -167,7 +190,24 @@ class Main:
         if event.key == pygame.K_RIGHT:
             self.game.redo_move()
 
+    def simulation(self, n):
+        sign = 1
+        x = 0
+        for i in range(n):
+            result = main.mainloop(True)
+            self.game.reset()
+            print(f"Game {i + 1}: {result}")
+
+            x += sign * result
+
+            sign *= -1
+            self.game.player_white, self.game.player_black = self.game.player_black, self.game.player_white
+            self.game.player_white.reset(self.game.board)
+            self.game.player_black.reset(self.game.board)
+
+        print(f"p1: {1000 - x}, p2: {x}")
 
 if __name__ == "__main__":
     main = Main()
-    main.mainloop()
+    main.mainloop(False)
+    # main.simulation(1000)

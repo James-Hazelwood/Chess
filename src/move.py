@@ -1,8 +1,8 @@
 
 class Move:
 
-    def __init__(self, piece, start, end, piece_taken, castling, last_move,
-                 en_passant_occur, promotion):
+    def __init__(self, piece, start, end, piece_taken=None, castling=False, last_move=None,
+                 en_passant_occur=False, promotion=None):
         self.piece = piece
         self.start = start
         self.end = end

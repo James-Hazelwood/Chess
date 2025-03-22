@@ -1,26 +1,33 @@
 import pygame
+import os
 
 from const import *
-from ai import Ai
+from src.ai.ai import Ai
+from board import Board
+from src.ai.ai_random import AiRandom
+
 
 class Game:
 
-    def __init__(self, dragger, board):
-        self.board = board
+    def __init__(self, dragger, fen, destroy_matt):
         self.dragger = dragger
+
+        self.board = Board(fen, destroy_matt)
         self.turn = "white"
         self.board.add_all_moves(self.turn)
-
         self.game_log_fen = ["rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR"]
         self.game_log_moves = [None]
         self.index = 0
+        self.game_state = "play"
 
         self.player_white = Ai(self.board)
-        self.player_black = Ai(self.board)
-        self.game_over = False
+        self.player_black = AiRandom(self.board)
 
     def ai_play(self):
-        move = self.player_black.play(self.board, self.turn)
+        if self.turn == "white":
+            move = self.player_white.play(self.turn)
+        else:
+            move = self.player_black.play(self.turn)
         self.board.make_move(move)
         self.change_turn(move)
 
@@ -31,22 +38,23 @@ class Game:
 
         # check draws (stalemate later)
         if self.check_50_move_rule() or self.threefold_rep(new_fen):
-            self.game_over = True
+            self.game_state = "draw"
 
         self.game_log_fen.append(new_fen)
         self.game_log_moves.append(move)
-        self.board.reset_all_color_moves(self.turn)
         self.turn = "black" if self.turn == "white" else "white"
 
         self.board.add_all_moves(self.turn)
 
         # check checkmate and stalemate
         if self.board.check_checkmate():
-            self.game_over = True
+            self.game_state = f"{self.turn} wins"
+        elif self.board.check_stalemate():
+            self.game_state = "draw"
 
     def undo_move(self):
         if self.index != 0:
-            self.game_over = False
+            self.game_state = "play"
             self.turn = "black" if self.turn == "white" else "white"
             self.board.undo_move(self.game_log_moves[self.index])
             self.board.add_all_moves(self.turn)
@@ -59,7 +67,9 @@ class Game:
             self.board.make_move(self.game_log_moves[self.index])
             self.board.add_all_moves(self.turn)
             if self.board.check_checkmate():
-                self.game_over = True
+                self.game_state = f"{self.turn} wins"
+            elif self.board.check_stalemate():
+                self.game_state = "draw"
 
     def remove_future_states(self):
         del self.game_log_fen[self.index + 1:]
@@ -76,6 +86,15 @@ class Game:
                 matches+= 1
 
         return True if matches > 1 else False
+
+    def reset(self, fen="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR", destroy_matt=False):
+        self.board = Board(fen, destroy_matt)
+        self.turn = "white"
+        self.board.add_all_moves(self.turn)
+        self.game_log_fen = [fen]
+        self.game_log_moves = [None]
+        self.index = 0
+        self.game_state = "play"
 
     # blit methods
     def show_bg(self, surface):
@@ -100,8 +119,7 @@ class Game:
                 if [row, col] != [self.dragger.initial_row, self.dragger.initial_col]:
                     img = pygame.image.load(piece.image)
                     img_center = col * SQSIZE + SQSIZE // 2, row * SQSIZE + SQSIZE // 2
-                    piece.image_rect = img.get_rect(center=img_center)
-                    surface.blit(img, piece.image_rect)
+                    surface.blit(img, img.get_rect(center=img_center))
 
     def show_moves(self, surface, row, col):
         for move in self.board.legal_moves:
@@ -132,3 +150,34 @@ class Game:
             loc = self.board.get_king_loc(self.board.in_check_var)
             rect = (loc[1] * SQSIZE, loc[0] * SQSIZE, SQSIZE, SQSIZE)
             pygame.draw.rect(surface, CHECK, rect)
+
+    def show_promotion(self, surface, move):
+
+        # cover up dragging piece
+        coverup_row = move.start[0]
+        coverup_col = move.start[1]
+        if (move.start[0] + move.start[1]) % 2 == 0:
+            # light green
+            color = WHITE_COLOR
+        else:
+            # dark green
+            color = BLACK_COLOR
+
+        rect = (coverup_col * SQSIZE, coverup_row * SQSIZE, SQSIZE, SQSIZE)
+        pygame.draw.rect(surface, color, rect)
+
+
+        direction, start_row, color = (-1, 4, "black") if move.end[0] == 7 else (1, 0, "white")
+        row = move.end[0]
+        col = move.end[1]
+
+        # promotion background
+        rect = (col * SQSIZE, start_row * SQSIZE, SQSIZE, 4 * SQSIZE)
+        pygame.draw.rect(surface, BORDER, rect)
+        rect = (col * SQSIZE + BORDER_SIZE, start_row * SQSIZE + BORDER_SIZE, SQSIZE - 2 * BORDER_SIZE, 4 * SQSIZE - 2 * BORDER_SIZE)
+        pygame.draw.rect(surface, WHITE_COLOR, rect)
+
+        for piece, new_row in [["queen", row], ["rook", row + direction], ["knight", row + 2 * direction], ["bishop", row + 3 * direction]]:
+            img = pygame.image.load(os.path.join(f"../assets/images/imgs-80px/{color}_{piece}.png"))
+            img_center = col * SQSIZE + SQSIZE // 2, new_row * SQSIZE + SQSIZE // 2
+            surface.blit(img, img.get_rect(center=img_center))

@@ -1,9 +1,7 @@
-import copy
-
-from const import *
-from square import Square
-from piece import *
-from move import Move
+from src.const import *
+from src.square import Square
+from src.piece import *
+from src.move import Move
 
 class Board:
 
@@ -11,17 +9,20 @@ class Board:
     def __init__(self, fen= "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR", destroy_matt=False):
         self.squares = []
         self.legal_moves = []
+        self.turn = "white"
 
         # dict of 2 lists of piece locations (one for each color)
         self.pieces = dict()
         self.pieces["white"] = []
         self.pieces["black"] = []
+        self.pieces_left = 0
 
         # dict of king locations
         self.kings = dict()
         self.kings["white"] = []
         self.kings["black"] = []
 
+        self.castled = [0,0]
         self.in_check_var = False
         self.last_move = [[-1, -1,], [-1, -1]]
 
@@ -44,6 +45,8 @@ class Board:
         new_row = move.end[0]
         new_col = move.end[1]
 
+        self.turn = "black" if self.turn == "white" else "white"
+
         move.castle_rights = [row[:] for row in self.castle_rights]
 
         # add 1 to moves counter
@@ -54,19 +57,24 @@ class Board:
             self.squares[new_row - piece.dir][new_col].piece = None
 
         # remove captures from pieces dict and reset move counter
-        if self.is_capture(move) and not testing:
-            self.uneventful_moves = 0
+        if self.is_capture(move):
+            self.pieces_left -= 1
+            if not testing:
+                self.uneventful_moves = 0
 
-            # en passant
-            if move.en_passant_occur:
-                self.pieces[piece.other_color()].remove([new_row - piece.dir, new_col])
+                # en passant
+                if move.en_passant_occur:
+                    self.pieces[piece.other_color()].remove([new_row - piece.dir, new_col])
 
-            # normal
-            else:
-                self.pieces[piece.other_color()].remove([new_row, new_col])
+                # normal
+                else:
+                    self.pieces[piece.other_color()].remove([new_row, new_col])
 
         # castling
         if move.castling:
+
+            # update castled
+            self.castled[row // 7] = 1
 
             # decide which way to castle
             rook_loc = [7, 5] if new_col - col == 2 else [0, 3]
@@ -135,6 +143,8 @@ class Board:
         new_row = move.end[0]
         new_col = move.end[1]
 
+        self.turn = "black" if self.turn == "white" else "white"
+
         # subtract 1 to moves counter < note might not be correct (fix later)
         self.uneventful_moves -= 1
 
@@ -152,6 +162,7 @@ class Board:
         # add captures and reset move counter
         if self.is_capture(move):
             self.uneventful_moves = 0
+            self.pieces_left += 1
 
             # en passant
             if move.en_passant_occur:
@@ -167,6 +178,9 @@ class Board:
 
         # castling
         if move.castling:
+
+            # update castled
+            self.castled[row // 7] = 0
 
             # decide which way we castled
             rook_loc = [7, 5] if new_col - col == 2 else [0, 3]
@@ -209,9 +223,13 @@ class Board:
     def check_pawn_promotion(self, piece, new_row) -> bool:
         return isinstance(piece, Pawn) and (new_row == 0 or new_row == 7)
 
-    # if there are no legal moves, its checkmate or stalemate < add later
+    # if there are no legal moves and the kings in check, its checkmate
     def check_checkmate(self):
-        return True if not self.legal_moves else False
+        return True if self.king_in_check(self.turn) and not self.legal_moves else False
+
+    # if there are no legal moves and the king is not in check, its stalemate
+    def check_stalemate(self):
+        return True if not self.king_in_check(self.turn) and not self.legal_moves else False
 
     # updates legal moves to self and returns legal moves
     def add_all_moves(self, color):
@@ -226,10 +244,6 @@ class Board:
                                                        None))
 
         return self.legal_moves
-
-    def reset_all_color_moves(self, color):
-        for row, col in self.pieces[color]:
-            self.squares[row][col].piece.moves = []
 
     # move functions
     def calc_moves(self, row, col):
@@ -493,6 +507,9 @@ class Board:
     def other_color(self, color):
         return "white" if color == "black" else "black"
 
+    def other_turn(self):
+        return "black" if self.turn == "white" else "white"
+
     def convert_board_to_fen(self):
         substrings = []
         for row in self.squares:
@@ -554,6 +571,7 @@ class Board:
 
                     self.squares[cur_row][cur_col] = Square(cur_row, cur_col, new_piece)
                     self.pieces[color].append([cur_row, cur_col])
+                    self.pieces_left += 1
                     cur_col += 1
             cur_row += 1
 
